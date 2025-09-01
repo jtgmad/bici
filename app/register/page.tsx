@@ -24,15 +24,24 @@ export default function Register() {
     setLoading(true)
 
     try {
-      const { data, error } = await supabase.auth.signUp({
+      // Registro
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
       })
 
-      if (error) throw error
+      if (signUpError) throw signUpError
 
-      alert('Registro exitoso. Revisa tu email para confirmar tu cuenta.')
-      router.push('/login')
+      // Login automático después del registro
+      const { data: signInData, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
+
+      if (signInError) throw signInError
+
+      // Redirigir a publish o listings
+      router.push('/publish')
     } catch (err: any) {
       setError(err.message)
     } finally {
@@ -62,6 +71,7 @@ export default function Register() {
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
+            minLength={6}
             className="w-full p-2 border rounded"
           />
         </div>
@@ -73,6 +83,7 @@ export default function Register() {
             value={confirmPassword}
             onChange={(e) => setConfirmPassword(e.target.value)}
             required
+            minLength={6}
             className="w-full p-2 border rounded"
           />
         </div>
@@ -84,7 +95,7 @@ export default function Register() {
           disabled={loading}
           className="bg-blue-500 text-white px-4 py-2 rounded"
         >
-          {loading ? 'Registrando...' : 'Registrarse'}
+          {loading ? 'Procesando...' : 'Registrarse'}
         </button>
       </form>
     </main>

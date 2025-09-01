@@ -2,35 +2,42 @@
 
 import { useState } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { useRouter } from 'next/navigation'
 
 export default function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [loading, setLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const router = useRouter()
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
+    setError(null)
     setLoading(true)
 
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    })
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      })
 
-    if (error) {
-      alert('Error al iniciar sesión: ' + error.message)
-    } else {
-      alert('Iniciado sesión correctamente!')
+      if (error) throw error
+
+      // Redirige al listado de bicicletas publicadas
+      router.push('/publish')
+    } catch (err: any) {
+      setError(err.message)
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   return (
     <main className="p-8 max-w-md mx-auto">
-      <h1 className="text-2xl font-bold mb-6">Iniciar sesión</h1>
-      <form onSubmit={handleLogin}>
-        <div className="mb-4">
+      <h1 className="text-2xl font-bold mb-6">Iniciar Sesión</h1>
+      <form onSubmit={handleLogin} className="space-y-4">
+        <div>
           <label>Email</label>
           <input
             type="email"
@@ -41,7 +48,7 @@ export default function Login() {
           />
         </div>
 
-        <div className="mb-4">
+        <div>
           <label>Contraseña</label>
           <input
             type="password"
@@ -52,12 +59,14 @@ export default function Login() {
           />
         </div>
 
+        {error && <p className="text-red-500">{error}</p>}
+
         <button
           type="submit"
           disabled={loading}
-          className="bg-blue-500 text-white px-4 py-2 rounded"
+          className="bg-green-500 text-white px-4 py-2 rounded"
         >
-          {loading ? 'Iniciando...' : 'Iniciar sesión'}
+          {loading ? 'Iniciando sesión...' : 'Iniciar Sesión'}
         </button>
       </form>
     </main>
