@@ -161,7 +161,7 @@ export default function Home() {
         <div>
           <p className="mb-2 font-medium">Modelos:</p>
           <AutocompleteMulti
-            table="models_with_brands"
+            view="models_with_brands"
             selectedValues={filterModels}
             onChange={setFilterModels}
             filters={filterBrands.length > 0 ? { brand_name: filterBrands } : {}}

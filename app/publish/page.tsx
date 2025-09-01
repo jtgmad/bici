@@ -46,33 +46,52 @@ export default function Publish() {
 
   // --- AUTOCOMPLETE BRANDS ---
   useEffect(() => {
-    const fetchBrands = async () => {
-      if (!brandInput) { setBrandOptions([]); return }
-      const { data } = await supabase
-        .from('brands')
-        .select('*')
-        .ilike('name', `%${brandInput}%`)
-        .limit(10)
-      if (data) setBrandOptions(data)
+  const fetchBrands = async () => {
+    if (!brandInput) { setBrandOptions([]); return }
+    const { data } = await supabase
+      .from('brands')
+      .select('*')
+      .ilike('name', `%${brandInput}%`)
+      .limit(10)
+    
+    if (data) {
+      // Agrega "Otro" solo si no existe
+      const brandsWithOther = data.some(b => b.name.toLowerCase() === 'otro') 
+        ? data 
+        : [...data, { id: 0, name: 'Otro' }]
+      setBrandOptions(brandsWithOther)
     }
-    fetchBrands()
-  }, [brandInput])
+  }
+  fetchBrands()
+}, [brandInput])
+
 
   // --- AUTOCOMPLETE MODELS ---
   useEffect(() => {
-    if (!brandId) { setModelOptions([]); return }
+    if (!brandId) {
+      setModelOptions([]);
+      return;
+    }
     const fetchModels = async () => {
-      if (!modelInput) { setModelOptions([]); return }
       const { data } = await supabase
         .from('models')
         .select('*')
         .eq('brand_id', brandId)
         .ilike('name', `%${modelInput}%`)
-        .limit(10)
-      if (data) setModelOptions(data)
+        .limit(10);
+
+      if (data) {
+        // Agregamos opción "Otro" si no existe
+        const modelsWithOther = data.some(m => m.name.toLowerCase() === 'otro')
+          ? data
+          : [...data, { id: 0, name: 'Otro', brand_id: brandId }];
+        setModelOptions(modelsWithOther);
+      }
     }
-    fetchModels()
-  }, [brandId, modelInput])
+    fetchModels();
+  }, [brandId, modelInput]);
+
+
 
   // --- RESET CAMPOS CUANDO CAMBIA CATEGORIA ---
   useEffect(() => {
@@ -206,47 +225,70 @@ export default function Publish() {
               table="brands"
               selectedValues={brandName ? [brandName] : []}
               onChange={async (values) => {
-                const name = values[0] || ''
-                setBrandName(name)
-                if (name) {
+                const selectedBrand = values[0] || ''
+                setBrandName(selectedBrand)
+
+                if (selectedBrand === 'Otro') {
+                  setBrandId(null)
+                } else {
                   const { data } = await supabase
                     .from('brands')
                     .select('id')
-                    .eq('name', name)
+                    .eq('name', selectedBrand)
                     .limit(1)
-                  setBrandId(data?.[0]?.id || null)
-                  setModelName('')
-                  setModelId(null)
-                } else {
-                  setBrandId(null)
-                  setModelName('')
-                  setModelId(null)
+                  setBrandId(data && data[0] ? data[0].id : null)
                 }
+
+                // reset modelo
+                setModelName('')
+                setModelId(null)
               }}
+              single={true}          // solo una marca
+              allowOther={true}      // opción "Otro"
             />
 
             {/* Modelo */}
-            {brandId && (
-              <AutocompleteMulti
-                table="models"
-                selectedValues={modelName ? [modelName] : []}
-                onChange={async (values) => {
-                  const name = values[0] || ''
-                  setModelName(name)
-                  if (name) {
-                    const { data } = await supabase
-                      .from('models')
-                      .select('id')
-                      .eq('name', name)
-                      .eq('brand_id', brandId)
-                      .limit(1)
-                    setModelId(data?.[0]?.id || null)
-                  } else {
-                    setModelId(null)
-                  }
-                }}
-              />
-            )}
+            <AutocompleteMulti
+              table="models"
+              selectedValues={modelName ? [modelName] : []}
+              onChange={async (values) => {
+                const selectedModel = values[0] || '';
+                setModelName(selectedModel);
+
+                if (selectedModel === 'Otro') {
+                  setModelId(null);
+                  return;
+                }
+
+                if (!selectedModel) {
+                  setModelId(null);
+                  return;
+                }
+
+                const { data } = await supabase
+                  .from('models')
+                  .select('id, brand_id')
+                  .eq('name', selectedModel)
+                  .eq('brand_id', brandId)
+                  .limit(1);
+
+                if (data && data.length > 0) {
+                  setModelId(data[0].id);
+                  setBrandId(data[0].brand_id);
+                } else {
+                  setModelId(null);
+                }
+              }}
+              single={true}          // solo un modelo
+              filters={brandId ? { brand_id: brandId } : {}}  // filtra modelos por la marca seleccionada
+              allowOther={false}      // no se permite "Otro"
+            />
+
+
+
+
+
+
 
             {/* Bicicleta */}
             {selectedCategory === 'Bicicleta' && (
