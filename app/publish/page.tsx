@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/app/AuthProvider'
+import { sanitizeInput, sanitizeNumber, sanitizeShort, sanitizeLong } from '@/app/utils/sanitize'
 import AutocompleteMulti from '@/app/components/AutocompleteMulti'
 
 export default function Publish() {
@@ -68,67 +69,96 @@ export default function Publish() {
     if (e.target.files) setImages(Array.from(e.target.files))
   }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setSubmitting(true)
-    try {
-      const uploadPromises = images.map(async (file) => {
-        const { data, error } = await supabase.storage
-          .from('bike-images')
-          .upload(`bici-${Date.now()}-${file.name}`, file)
-        if (error) throw error
-        return data.path
-      })
-      const imageUrls = await Promise.all(uploadPromises)
 
-      const newListing: any = {
-        user_id: user.id,
-        title,
-        condition,
-        price: parseInt(price),
-        location,
-        images: imageUrls,
-      }
-
-      if (description) newListing.description = description
-      if (categoryId) newListing.category_id = categoryId
-
-      // Guardar SIEMPRE texto libre aunque no haya ID
-      if (brandName) newListing.brand = brandName
-      if (brandId) newListing.brand_id = brandId
-
-      if (modelName) newListing.model = modelName
-      if (modelId) newListing.model_id = modelId
-
-      if (selectedCategory === 'Bicicleta') {
-        if (typeValue) newListing.bike_type = typeValue
-        if (frameSize === 'otro' && frameSizeCustom) newListing.frame_size = frameSizeCustom
-        else if (frameSize) newListing.frame_size = frameSize
-        if (wheelSize === 'otro' && wheelSizeCustom) newListing.wheel_size = wheelSizeCustom
-        else if (wheelSize) newListing.wheel_size = wheelSize
-      }
-
-      if (['Bicicleta','Componente'].includes(selectedCategory!) && components.length > 0) {
-        newListing.components = components
-      }
-
-      const { error } = await supabase.from('listings').insert([newListing])
+  
+const handleSubmit = async (e: React.FormEvent) => {
+  e.preventDefault()
+  setSubmitting(true)
+  try {
+    // --- Subir imágenes ---
+    const uploadPromises = images.map(async (file) => {
+      const { data, error } = await supabase.storage
+        .from('bike-images')
+        .upload(`bici-${Date.now()}-${file.name}`, file)
       if (error) throw error
+      return data.path
+    })
+    const imageUrls = await Promise.all(uploadPromises)
 
-      alert('Anuncio publicado con éxito!')
-      setTitle(''); setCategoryId(null); setBrandId(null); setBrandName('')
-      setModelId(null); setModelName(''); setTypeValue('')
-      setFrameSize(''); setFrameSizeCustom(''); setWheelSize(''); setWheelSizeCustom('')
-      setCondition('usado')
-      setPrice(''); setDescription(''); setLocation(''); setComponents([]); setImages([])
-
-    } catch (err: any) {
-      console.error('Error publicando:', err)
-      alert('Error: ' + err.message)
-    } finally {
-      setSubmitting(false)
+    // --- Construcción del objeto listing ---
+    const newListing: any = {
+      user_id: user.id,
+      title: sanitizeInput(title, 120),
+      condition,
+      price: sanitizeNumber(price, 0, 20000),
+      location: sanitizeInput(location, 80),
+      images: imageUrls,
     }
+
+    if (description) newListing.description = sanitizeInput(description, 1000)
+    if (categoryId) newListing.category_id = categoryId
+
+    // Marca: prioriza brandId si existe, si no guarda el nombre libre
+    if (brandId) newListing.brand_id = brandId
+    else if (brandName) newListing.brand = sanitizeInput(brandName, 80)
+
+    // Modelo: prioriza modelId si existe, si no guarda el nombre libre
+    if (modelId) newListing.model_id = modelId
+    else if (modelName) newListing.model = sanitizeInput(modelName, 80)
+
+    // Campos específicos de bicicleta
+    if (selectedCategory === 'Bicicleta') {
+      if (typeValue) newListing.bike_type = sanitizeInput(typeValue, 40)
+
+      if (frameSize === 'otro' && frameSizeCustom)
+        newListing.frame_size = sanitizeInput(frameSizeCustom, 20)
+      else if (frameSize)
+        newListing.frame_size = sanitizeInput(frameSize, 20)
+
+      if (wheelSize === 'otro' && wheelSizeCustom)
+        newListing.wheel_size = sanitizeInput(wheelSizeCustom, 20)
+      else if (wheelSize)
+        newListing.wheel_size = sanitizeInput(wheelSize, 20)
+    }
+
+    // Componentes
+    if (['Bicicleta', 'Componente'].includes(selectedCategory!) && components.length > 0) {
+      newListing.components = components.map(c => sanitizeInput(c, 50))
+    }
+
+    // --- Insert en DB ---
+    const { error } = await supabase.from('listings').insert([newListing])
+    if (error) throw error
+
+    alert('Anuncio publicado con éxito!')
+
+    // Resetear formulario
+    setTitle('')
+    setCategoryId(null)
+    setBrandId(null)
+    setBrandName('')
+    setModelId(null)
+    setModelName('')
+    setTypeValue('')
+    setFrameSize('')
+    setFrameSizeCustom('')
+    setWheelSize('')
+    setWheelSizeCustom('')
+    setCondition('usado')
+    setPrice('')
+    setDescription('')
+    setLocation('')
+    setComponents([])
+    setImages([])
+
+  } catch (err: any) {
+    console.error('Error publicando:', err)
+    alert('Error: ' + err.message)
+  } finally {
+    setSubmitting(false)
   }
+}
+
 
   const frameOptions = ['48','50','52','54','56','58','60','62']
 
