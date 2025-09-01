@@ -1,22 +1,24 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import Select from 'react-select'
+import CreatableSelect from 'react-select/creatable'
 import { supabase } from '@/lib/supabaseClient'
 
 interface AutocompleteMultiProps {
-  table?: 'brands' | 'models' // opcional
-  view?: 'models_with_brands' // opcional
+  table?: 'brands' | 'models'
+  view?: 'models_with_brands'
   onChange: (values: string[]) => void
   selectedValues?: string[]
   filters?: Record<string, any>
-  single?: boolean // nuevo: selección única
-  allowOther?: boolean // nuevo: permite opción "Otro"
+  single?: boolean
+  allowOther?: boolean
+  brandId?: number | null // para filtrar modelos por marca
 }
 
 interface Option {
   value: string
   label: string
+  brand_id?: number | null // solo para modelos
 }
 
 export default function AutocompleteMulti({
@@ -26,30 +28,35 @@ export default function AutocompleteMulti({
   selectedValues = [],
   filters = {},
   single = false,
-  allowOther = false
+  allowOther = false,
+  brandId = null
 }: AutocompleteMultiProps) {
   const [options, setOptions] = useState<Option[]>([])
   const [input, setInput] = useState('')
   const [mounted, setMounted] = useState(false)
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  useEffect(() => setMounted(true), [])
 
   useEffect(() => {
-    if (!mounted) return
-    if (!table && !view) return
+    if (!mounted || (!table && !view)) return
 
     const fetchData = async () => {
       try {
         const target = view || table!
         const filterColumn = view === 'models_with_brands' ? 'model_name' : 'name'
 
-        const { data, error } = await supabase
-          .from(target)
-          .select('*')
-          .ilike(filterColumn, `%${input}%`)
-          .match(filters || {})
+        let query = supabase.from(target).select('*')
+
+        // filtros extra
+        Object.entries(filters).forEach(([key, value]) => {
+          query = query.eq(key, value)
+        })
+
+        if (input) {
+          query = query.ilike(filterColumn, `%${input}%`)
+        }
+
+        const { data, error } = await query
 
         if (error) {
           console.error('Error fetching options:', error.message)
@@ -57,15 +64,26 @@ export default function AutocompleteMulti({
           return
         }
 
-        let fetchedOptions =
+        let fetchedOptions: Option[] =
           data?.map(d => ({
             value: view === 'models_with_brands' ? `${d.brand_name} - ${d.model_name}` : d.name,
-            label: view === 'models_with_brands' ? `${d.brand_name} - ${d.model_name}` : d.name
+            label: view === 'models_with_brands' ? `${d.brand_name} - ${d.model_name}` : d.name,
+            brand_id: (d as any).brand_id ?? null
           })) || []
 
-        // agregar "Otro" si allowOther y no existe
+        // filtrar modelos por marca
+        if (table === 'models') {
+          if (brandId != null) {
+            fetchedOptions = fetchedOptions.filter(opt => opt.brand_id === brandId)
+          } else if (allowOther) {
+            // Marca "Otro": no mostrar modelos reales
+            fetchedOptions = []
+          }
+        }
+
+        // añadir opción "Otro"
         if (allowOther && !fetchedOptions.some(o => o.label.toLowerCase() === 'otro')) {
-          fetchedOptions.push({ value: 'Otro', label: 'Otro' })
+          fetchedOptions.push({ value: 'Otro', label: 'Otro', brand_id: null })
         }
 
         setOptions(fetchedOptions)
@@ -76,17 +94,21 @@ export default function AutocompleteMulti({
     }
 
     fetchData()
-  }, [input, table, view, mounted, JSON.stringify(filters), selectedValues, allowOther])
+  }, [input, table, view, mounted, JSON.stringify(filters), selectedValues, allowOther, brandId])
 
   if (!mounted) return null
 
-  // solo un valor si single
   const value = single
-    ? options.find(opt => selectedValues.includes(opt.value)) || null
-    : options.filter(opt => selectedValues.includes(opt.value))
+    ? options.find(opt => selectedValues.includes(opt.value)) || (selectedValues[0] ? { value: selectedValues[0], label: selectedValues[0] } : null)
+    : [
+        ...options.filter(opt => selectedValues.includes(opt.value)),
+        ...selectedValues
+          .filter(val => !options.some(opt => opt.value === val))
+          .map(val => ({ value: val, label: val }))
+      ]
 
   return (
-    <Select
+    <CreatableSelect
       isMulti={!single}
       options={options}
       value={value}
@@ -99,8 +121,17 @@ export default function AutocompleteMulti({
           onChange((vals as Option[]).map(v => v.value))
         }
       }}
+      onCreateOption={val => {
+        // cuando escribes algo nuevo y le das enter
+        if (single) {
+          onChange([val])
+        } else {
+          onChange([...selectedValues, val])
+        }
+      }}
       placeholder={table === 'brands' ? 'Selecciona marca...' : 'Selecciona modelo...'}
       noOptionsMessage={() => 'No se encontraron opciones'}
+      formatCreateLabel={(inputValue) => `Crear "${inputValue}"`}
     />
   )
 }

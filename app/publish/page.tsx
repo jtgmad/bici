@@ -29,11 +29,6 @@ export default function Publish() {
   const [submitting, setSubmitting] = useState(false)
 
   const [categories, setCategories] = useState<{id: number, name: string}[]>([])
-  const [brandOptions, setBrandOptions] = useState<{id: number, name: string}[]>([])
-  const [modelOptions, setModelOptions] = useState<{id: number, name: string, brand_id: number}[]>([])
-
-  const [brandInput, setBrandInput] = useState('')
-  const [modelInput, setModelInput] = useState('')
 
   // --- FETCH CATEGORIES ---
   useEffect(() => {
@@ -44,63 +39,12 @@ export default function Publish() {
     fetchCategories()
   }, [])
 
-  // --- AUTOCOMPLETE BRANDS ---
-  useEffect(() => {
-  const fetchBrands = async () => {
-    if (!brandInput) { setBrandOptions([]); return }
-    const { data } = await supabase
-      .from('brands')
-      .select('*')
-      .ilike('name', `%${brandInput}%`)
-      .limit(10)
-    
-    if (data) {
-      // Agrega "Otro" solo si no existe
-      const brandsWithOther = data.some(b => b.name.toLowerCase() === 'otro') 
-        ? data 
-        : [...data, { id: 0, name: 'Otro' }]
-      setBrandOptions(brandsWithOther)
-    }
-  }
-  fetchBrands()
-}, [brandInput])
-
-
-  // --- AUTOCOMPLETE MODELS ---
-  useEffect(() => {
-    if (!brandId) {
-      setModelOptions([]);
-      return;
-    }
-    const fetchModels = async () => {
-      const { data } = await supabase
-        .from('models')
-        .select('*')
-        .eq('brand_id', brandId)
-        .ilike('name', `%${modelInput}%`)
-        .limit(10);
-
-      if (data) {
-        // Agregamos opción "Otro" si no existe
-        const modelsWithOther = data.some(m => m.name.toLowerCase() === 'otro')
-          ? data
-          : [...data, { id: 0, name: 'Otro', brand_id: brandId }];
-        setModelOptions(modelsWithOther);
-      }
-    }
-    fetchModels();
-  }, [brandId, modelInput]);
-
-
-
   // --- RESET CAMPOS CUANDO CAMBIA CATEGORIA ---
   useEffect(() => {
     setBrandId(null)
     setBrandName('')
-    setBrandInput('')
     setModelId(null)
     setModelName('')
-    setModelInput('')
     setTypeValue('')
     setFrameSize('')
     setFrameSizeCustom('')
@@ -113,7 +57,6 @@ export default function Publish() {
   useEffect(() => {
     setModelId(null)
     setModelName('')
-    setModelInput('')
   }, [brandId])
 
   if (loading) return <p className="p-8">Cargando...</p>
@@ -149,14 +92,13 @@ export default function Publish() {
 
       if (description) newListing.description = description
       if (categoryId) newListing.category_id = categoryId
-      if (brandId) {
-        newListing.brand_id = brandId
-        newListing.brand = brandName
-      }
-      if (modelId) {
-        newListing.model_id = modelId
-        newListing.model = modelName
-      }
+
+      // Guardar SIEMPRE texto libre aunque no haya ID
+      if (brandName) newListing.brand = brandName
+      if (brandId) newListing.brand_id = brandId
+
+      if (modelName) newListing.model = modelName
+      if (modelId) newListing.model_id = modelId
 
       if (selectedCategory === 'Bicicleta') {
         if (typeValue) newListing.bike_type = typeValue
@@ -174,8 +116,8 @@ export default function Publish() {
       if (error) throw error
 
       alert('Anuncio publicado con éxito!')
-      setTitle(''); setCategoryId(null); setBrandId(null); setBrandName(''); setBrandInput('')
-      setModelId(null); setModelName(''); setModelInput(''); setTypeValue('')
+      setTitle(''); setCategoryId(null); setBrandId(null); setBrandName('')
+      setModelId(null); setModelName(''); setTypeValue('')
       setFrameSize(''); setFrameSizeCustom(''); setWheelSize(''); setWheelSizeCustom('')
       setCondition('usado')
       setPrice(''); setDescription(''); setLocation(''); setComponents([]); setImages([])
@@ -228,67 +170,71 @@ export default function Publish() {
                 const selectedBrand = values[0] || ''
                 setBrandName(selectedBrand)
 
-                if (selectedBrand === 'Otro') {
-                  setBrandId(null)
-                } else {
-                  const { data } = await supabase
-                    .from('brands')
-                    .select('id')
-                    .eq('name', selectedBrand)
-                    .limit(1)
-                  setBrandId(data && data[0] ? data[0].id : null)
+                if (!selectedBrand || selectedBrand.toLowerCase() === 'otro') {
+                  setBrandId(null)          // marca libre
+                  setModelName('')          // dejamos el modelo vacío
+                  setModelId(null)
+                  return
                 }
 
-                // reset modelo
+                // Intentar obtener id real de la marca seleccionada
+                const { data, error } = await supabase
+                  .from('brands')
+                  .select('id')
+                  .eq('name', selectedBrand)
+                  .limit(1)
+
+                if (!error && data && data[0]) {
+                  setBrandId(data[0].id)
+                } else {
+                  setBrandId(null) // no existe -> libre
+                }
+
+                // Al cambiar marca, reseteamos modelo
                 setModelName('')
                 setModelId(null)
               }}
-              single={true}          // solo una marca
-              allowOther={true}      // opción "Otro"
+              single
+              allowOther
             />
 
             {/* Modelo */}
             <AutocompleteMulti
               table="models"
               selectedValues={modelName ? [modelName] : []}
+              brandId={brandId} // ⬅️ filtra por marca; si null, solo “Otro” y libre
               onChange={async (values) => {
-                const selectedModel = values[0] || '';
-                setModelName(selectedModel);
+                const selectedModel = values[0] || ''
+                setModelName(selectedModel)
 
-                if (selectedModel === 'Otro') {
-                  setModelId(null);
-                  return;
+                if (!selectedModel || selectedModel.toLowerCase() === 'otro') {
+                  setModelId(null) // modelo libre
+                  return
                 }
 
-                if (!selectedModel) {
-                  setModelId(null);
-                  return;
+                // Solo intentamos buscar ID si hay brandId real
+                if (!brandId) {
+                  setModelId(null)
+                  return
                 }
 
-                const { data } = await supabase
+                const { data, error } = await supabase
                   .from('models')
                   .select('id, brand_id')
                   .eq('name', selectedModel)
                   .eq('brand_id', brandId)
-                  .limit(1);
+                  .limit(1)
 
-                if (data && data.length > 0) {
-                  setModelId(data[0].id);
-                  setBrandId(data[0].brand_id);
+                if (!error && data && data[0]) {
+                  setModelId(data[0].id)
+                  setBrandId(data[0].brand_id) // coherencia
                 } else {
-                  setModelId(null);
+                  setModelId(null) // texto libre
                 }
               }}
-              single={true}          // solo un modelo
-              filters={brandId ? { brand_id: brandId } : {}}  // filtra modelos por la marca seleccionada
-              allowOther={false}      // no se permite "Otro"
+              single
+              allowOther
             />
-
-
-
-
-
-
 
             {/* Bicicleta */}
             {selectedCategory === 'Bicicleta' && (
@@ -352,10 +298,15 @@ export default function Publish() {
             )}
 
             {/* Componentes */}
-            {['Bicicleta','Componente'].includes(selectedCategory) && (
+            {['Bicicleta','Componente'].includes(selectedCategory || '') && (
               <div>
                 <label>Componentes (separados por coma)</label>
-                <input type="text" value={components.join(', ')} onChange={e => setComponents(e.target.value.split(',').map(s => s.trim()))} className="w-full p-2 border rounded" />
+                <input
+                  type="text"
+                  value={components.join(', ')}
+                  onChange={e => setComponents(e.target.value.split(',').map(s => s.trim()))}
+                  className="w-full p-2 border rounded"
+                />
               </div>
             )}
 
