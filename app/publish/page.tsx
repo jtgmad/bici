@@ -3,14 +3,18 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { useAuth } from '@/app/AuthProvider'
+import AutocompleteMulti from '@/app/components/AutocompleteMulti'
 
 export default function Publish() {
   const { user, loading } = useAuth()
 
+  // --- STATES ---
   const [title, setTitle] = useState('')
   const [categoryId, setCategoryId] = useState<number | null>(null)
   const [brandId, setBrandId] = useState<number | null>(null)
   const [modelId, setModelId] = useState<number | null>(null)
+  const [brandName, setBrandName] = useState('')
+  const [modelName, setModelName] = useState('')
   const [typeValue, setTypeValue] = useState('')
   const [frameSize, setFrameSize] = useState('')
   const [wheelSize, setWheelSize] = useState('')
@@ -29,6 +33,7 @@ export default function Publish() {
   const [brandInput, setBrandInput] = useState('')
   const [modelInput, setModelInput] = useState('')
 
+  // --- FETCH CATEGORIES ---
   useEffect(() => {
     const fetchCategories = async () => {
       const { data } = await supabase.from('categories').select('*')
@@ -37,35 +42,7 @@ export default function Publish() {
     fetchCategories()
   }, [])
 
-  if (loading) return <p className="p-8">Cargando...</p>
-  if (!user) return <p>Debes iniciar sesión</p>
-
-  const selectedCategory = categories.find(c => c.id === categoryId)?.name
-
-  const filteredModels = modelOptions.filter(m => m.brand_id === brandId)
-
-  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    if (e.target.files) setImages(Array.from(e.target.files))
-  }
-
-  // Reset campos cuando cambie categoría o marca
-  useEffect(() => {
-    setBrandId(null)
-    setBrandInput('')
-    setModelId(null)
-    setModelInput('')
-    setTypeValue('')
-    setFrameSize('')
-    setWheelSize('')
-    setComponents([])
-  }, [categoryId])
-
-  useEffect(() => {
-    setModelId(null)
-    setModelInput('')
-  }, [brandId])
-
-  // Autocomplete marcas
+  // --- AUTOCOMPLETE BRANDS ---
   useEffect(() => {
     const fetchBrands = async () => {
       if (!brandInput) { setBrandOptions([]); return }
@@ -79,9 +56,9 @@ export default function Publish() {
     fetchBrands()
   }, [brandInput])
 
-  // Autocomplete modelos
+  // --- AUTOCOMPLETE MODELS ---
   useEffect(() => {
-    if (!brandId) return
+    if (!brandId) { setModelOptions([]); return }
     const fetchModels = async () => {
       if (!modelInput) { setModelOptions([]); return }
       const { data } = await supabase
@@ -93,12 +70,41 @@ export default function Publish() {
       if (data) setModelOptions(data)
     }
     fetchModels()
-  }, [modelInput, brandId])
+  }, [brandId, modelInput])
+
+  // --- RESET CAMPOS CUANDO CAMBIA CATEGORIA ---
+  useEffect(() => {
+    setBrandId(null)
+    setBrandName('')
+    setBrandInput('')
+    setModelId(null)
+    setModelName('')
+    setModelInput('')
+    setTypeValue('')
+    setFrameSize('')
+    setWheelSize('')
+    setComponents([])
+  }, [categoryId])
+
+  // --- RESET MODELO CUANDO CAMBIA MARCA ---
+  useEffect(() => {
+    setModelId(null)
+    setModelName('')
+    setModelInput('')
+  }, [brandId])
+
+  if (loading) return <p className="p-8">Cargando...</p>
+  if (!user) return <p>Debes iniciar sesión</p>
+
+  const selectedCategory = categories.find(c => c.id === categoryId)?.name
+
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (e.target.files) setImages(Array.from(e.target.files))
+  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     setSubmitting(true)
-
     try {
       const uploadPromises = images.map(async (file) => {
         const { data, error } = await supabase.storage
@@ -120,8 +126,14 @@ export default function Publish() {
 
       if (description) newListing.description = description
       if (categoryId) newListing.category_id = categoryId
-      if (brandId) newListing.brand_id = brandId
-      if (modelId) newListing.model_id = modelId
+      if (brandId) {
+        newListing.brand_id = brandId
+        newListing.brand = brandName
+      }
+      if (modelId) {
+        newListing.model_id = modelId
+        newListing.model = modelName
+      }
 
       if (selectedCategory === 'Bicicleta') {
         if (typeValue) newListing.bike_type = typeValue
@@ -129,7 +141,7 @@ export default function Publish() {
         if (wheelSize) newListing.wheel_size = wheelSize
       }
 
-      if (['Bicicleta','Componente'].includes(selectedCategory) && components.length > 0) {
+      if (['Bicicleta','Componente'].includes(selectedCategory!) && components.length > 0) {
         newListing.components = components
       }
 
@@ -137,9 +149,8 @@ export default function Publish() {
       if (error) throw error
 
       alert('Anuncio publicado con éxito!')
-      // Reset
-      setTitle(''); setCategoryId(null); setBrandId(null); setBrandInput('')
-      setModelId(null); setModelInput(''); setTypeValue('')
+      setTitle(''); setCategoryId(null); setBrandId(null); setBrandName(''); setBrandInput('')
+      setModelId(null); setModelName(''); setModelInput(''); setTypeValue('')
       setFrameSize(''); setWheelSize(''); setCondition('usado')
       setPrice(''); setDescription(''); setLocation(''); setComponents([]); setImages([])
 
@@ -155,7 +166,7 @@ export default function Publish() {
     <main className="p-8 max-w-2xl mx-auto">
       <h1 className="text-2xl font-bold mb-6">Publicar anuncio</h1>
       <form onSubmit={handleSubmit} className="space-y-4">
-
+        {/* Categoría */}
         <div>
           <label>Categoría</label>
           <select value={categoryId || ''} onChange={e => setCategoryId(Number(e.target.value) || null)} required className="w-full p-2 border rounded">
@@ -164,7 +175,6 @@ export default function Publish() {
           </select>
         </div>
 
-        {/* Solo mostrar el resto si hay categoría */}
         {selectedCategory && (
           <>
             {/* Condición */}
@@ -183,44 +193,54 @@ export default function Publish() {
             </div>
 
             {/* Marca */}
-            <div>
-              <label>Marca</label>
-              <input
-                type="text"
-                value={brandInput}
-                onChange={e => setBrandInput(e.target.value)}
-                placeholder="Escribe para buscar"
-                className="w-full p-2 border rounded"
-              />
-              {brandOptions.length > 0 && (
-                <ul className="border rounded mt-1 max-h-40 overflow-y-auto">
-                  {brandOptions.map(b => (
-                    <li key={b.id} className="p-1 cursor-pointer hover:bg-gray-200" onClick={() => { setBrandId(b.id); setBrandInput(b.name); setBrandOptions([])}}>{b.name}</li>
-                  ))}
-                </ul>
-              )}
-            </div>
+            <AutocompleteMulti
+              table="brands"
+              selectedValues={brandName ? [brandName] : []}
+              onChange={async (values) => {
+                const name = values[0] || ''
+                setBrandName(name)
+                if (name) {
+                  const { data } = await supabase
+                    .from('brands')
+                    .select('id')
+                    .eq('name', name)
+                    .limit(1)
+                  setBrandId(data?.[0]?.id || null)
+                  // Reset modelo
+                  setModelName('')
+                  setModelId(null)
+                } else {
+                  setBrandId(null)
+                  setModelName('')
+                  setModelId(null)
+                }
+              }}
+            />
 
             {/* Modelo */}
             {brandId && (
-              <div>
-                <label>Modelo</label>
-                <input
-                  type="text"
-                  value={modelInput}
-                  onChange={e => setModelInput(e.target.value)}
-                  placeholder="Escribe para buscar modelo"
-                  className="w-full p-2 border rounded"
-                />
-                {filteredModels.length > 0 && (
-                  <ul className="border rounded mt-1 max-h-40 overflow-y-auto">
-                    {filteredModels.map(m => (
-                      <li key={m.id} className="p-1 cursor-pointer hover:bg-gray-200" onClick={() => { setModelId(m.id); setModelInput(m.name); setModelOptions([])}}>{m.name}</li>
-                    ))}
-                  </ul>
-                )}
-              </div>
+              <AutocompleteMulti
+                table="models"
+                selectedValues={modelName ? [modelName] : []}
+                onChange={async (values) => {
+                  const name = values[0] || ''
+                  setModelName(name)
+                  if (name) {
+                    const { data } = await supabase
+                      .from('models')
+                      .select('id')
+                      .eq('name', name)
+                      .eq('brand_id', brandId)
+                      .limit(1)
+                    setModelId(data?.[0]?.id || null)
+                  } else {
+                    setModelId(null)
+                  }
+                }}
+              />
             )}
+
+
 
             {/* Bicicleta */}
             {selectedCategory === 'Bicicleta' && (
