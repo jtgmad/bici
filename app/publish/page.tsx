@@ -17,7 +17,9 @@ export default function Publish() {
   const [modelName, setModelName] = useState('')
   const [typeValue, setTypeValue] = useState('')
   const [frameSize, setFrameSize] = useState('')
+  const [frameSizeCustom, setFrameSizeCustom] = useState('')
   const [wheelSize, setWheelSize] = useState('')
+  const [wheelSizeCustom, setWheelSizeCustom] = useState('')
   const [condition, setCondition] = useState('usado')
   const [price, setPrice] = useState('')
   const [description, setDescription] = useState('')
@@ -82,7 +84,9 @@ export default function Publish() {
     setModelInput('')
     setTypeValue('')
     setFrameSize('')
+    setFrameSizeCustom('')
     setWheelSize('')
+    setWheelSizeCustom('')
     setComponents([])
   }, [categoryId])
 
@@ -137,8 +141,10 @@ export default function Publish() {
 
       if (selectedCategory === 'Bicicleta') {
         if (typeValue) newListing.bike_type = typeValue
-        if (frameSize) newListing.frame_size = frameSize
-        if (wheelSize) newListing.wheel_size = wheelSize
+        if (frameSize === 'otro' && frameSizeCustom) newListing.frame_size = frameSizeCustom
+        else if (frameSize) newListing.frame_size = frameSize
+        if (wheelSize === 'otro' && wheelSizeCustom) newListing.wheel_size = wheelSizeCustom
+        else if (wheelSize) newListing.wheel_size = wheelSize
       }
 
       if (['Bicicleta','Componente'].includes(selectedCategory!) && components.length > 0) {
@@ -151,7 +157,8 @@ export default function Publish() {
       alert('Anuncio publicado con éxito!')
       setTitle(''); setCategoryId(null); setBrandId(null); setBrandName(''); setBrandInput('')
       setModelId(null); setModelName(''); setModelInput(''); setTypeValue('')
-      setFrameSize(''); setWheelSize(''); setCondition('usado')
+      setFrameSize(''); setFrameSizeCustom(''); setWheelSize(''); setWheelSizeCustom('')
+      setCondition('usado')
       setPrice(''); setDescription(''); setLocation(''); setComponents([]); setImages([])
 
     } catch (err: any) {
@@ -161,6 +168,8 @@ export default function Publish() {
       setSubmitting(false)
     }
   }
+
+  const frameOptions = ['48','50','52','54','56','58','60','62']
 
   return (
     <main className="p-8 max-w-2xl mx-auto">
@@ -206,7 +215,6 @@ export default function Publish() {
                     .eq('name', name)
                     .limit(1)
                   setBrandId(data?.[0]?.id || null)
-                  // Reset modelo
                   setModelName('')
                   setModelId(null)
                 } else {
@@ -240,8 +248,6 @@ export default function Publish() {
               />
             )}
 
-
-
             {/* Bicicleta */}
             {selectedCategory === 'Bicicleta' && (
               <>
@@ -256,13 +262,49 @@ export default function Publish() {
                     <option value="electrica">Eléctrica</option>
                   </select>
                 </div>
+
+                {/* Frame size */}
                 <div>
                   <label>Tamaño de cuadro</label>
-                  <input type="text" value={frameSize} onChange={e => setFrameSize(e.target.value)} className="w-full p-2 border rounded" />
+                  <select value={frameSize} onChange={e => setFrameSize(e.target.value)} className="w-full p-2 border rounded">
+                    <option value="">Selecciona tamaño</option>
+                    {frameOptions.map(f => <option key={f} value={f}>{f} cm</option>)}
+                    <option value="otro">Otro</option>
+                  </select>
+                  {frameSize === 'otro' && (
+                    <input
+                      type="text"
+                      placeholder="Especifica el tamaño en cm"
+                      value={frameSizeCustom}
+                      onChange={e => setFrameSizeCustom(e.target.value)}
+                      className="w-full p-2 border rounded mt-2"
+                    />
+                  )}
                 </div>
+
+                {/* Wheel size */}
                 <div>
                   <label>Tamaño de rueda</label>
-                  <input type="text" value={wheelSize} onChange={e => setWheelSize(e.target.value)} className="w-full p-2 border rounded" />
+                  <select
+                    value={wheelSize}
+                    onChange={(e) => setWheelSize(e.target.value)}
+                    className="w-full p-2 border rounded"
+                  >
+                    <option value="">Selecciona tamaño</option>
+                    <option value="26">26" (≈660 mm)</option>
+                    <option value="27.5">27.5" (≈700 mm)</option>
+                    <option value="29">29" (≈740 mm)</option>
+                    <option value="otro">Otro</option>
+                  </select>
+                  {wheelSize === 'otro' && (
+                    <input
+                      type="text"
+                      placeholder="Especifica el tamaño en mm"
+                      value={wheelSizeCustom}
+                      onChange={(e) => setWheelSizeCustom(e.target.value)}
+                      className="w-full p-2 border rounded mt-2"
+                    />
+                  )}
                 </div>
               </>
             )}
